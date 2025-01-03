@@ -1,7 +1,6 @@
 streamlit
 langchain
 langchain-community
-chromadb
 PyPDF2
 docx2txt
 sentence-transformers
