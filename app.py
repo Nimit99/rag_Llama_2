@@ -18,8 +18,16 @@ from langchain_community.vectorstores import FAISS
 from langchain.chains import RetrievalQA
 from langchain.llms import HuggingFacePipeline
 
-# ---------- HELPER FUNCTIONS ---------- #
+# ---------------------------------------------------------------------
+# 1) CONSTANTS / TOKEN
+# ---------------------------------------------------------------------
+# NOTE: For real production, do NOT hardcode tokens.
+# Put them in secrets or environment variables.
+HF_TOKEN = "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"  # <-- your token
 
+# ---------------------------------------------------------------------
+# 2) PARSING FUNCTIONS
+# ---------------------------------------------------------------------
 def parse_pdf(file):
     """Extract text from a PDF file using PyPDF2."""
     pdf_reader = PyPDF2.PdfReader(file)
@@ -31,8 +39,9 @@ def parse_pdf(file):
     return text.strip()
 
 def parse_docx(file):
-    """Extract text from a DOCX file."""
-    return docx2txt.process(file).strip()
+    """Extract text from a DOCX file using docx2txt."""
+    text = docx2txt.process(file)
+    return text.strip() if text else ""
 
 def parse_csv(file):
     """
@@ -44,7 +53,6 @@ def parse_csv(file):
     csv_file = io.TextIOWrapper(file, encoding='utf-8')
     reader = csv.reader(csv_file)
     for row in reader:
-        # Join each row's cells with a space
         text_data.append(" ".join(row))
     return "\n".join(text_data).strip()
 
@@ -57,40 +65,39 @@ def parse_json(file):
     json_file = json.load(io.TextIOWrapper(file, encoding='utf-8'))
     return str(json_file).strip()
 
+# ---------------------------------------------------------------------
+# 3) CREATE VECTOR STORE (FAISS)
+# ---------------------------------------------------------------------
 def create_vector_store(text_chunks):
     """
     Create a FAISS vectorstore from text chunks using HuggingFaceEmbeddings.
-    We check if the chunks list is empty; if it is, we return None or raise an error.
+    If chunks are empty, return None.
     """
     if not text_chunks:
-        return None  # or raise ValueError("No text chunks to embed.")
+        return None
 
-    # Convert chunks to Document objects
     docs = [Document(page_content=chunk) for chunk in text_chunks]
-
-    # Use the community-based HuggingFaceEmbeddings
     embedder = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
-
-    # Create FAISS vector store from documents
     vector_store = FAISS.from_documents(docs, embedder)
     return vector_store
 
-# ---------- MAIN APP ---------- #
-
+# ---------------------------------------------------------------------
+# 4) STREAMLIT APP
+# ---------------------------------------------------------------------
 def main():
-    st.title("RAG App with FAISS + Hugging Face")
+    st.title("RAG with Llama 2 & FAISS")
 
+    # 1) File Upload
     uploaded_file = st.file_uploader(
         "Upload a PDF, DOCX, CSV, or JSON file",
         type=["pdf", "docx", "csv", "json"]
     )
 
     if uploaded_file is not None:
-        # Figure out file extension
+        # 2) Parse the file by extension
         file_ext = uploaded_file.name.split(".")[-1].lower()
         raw_text = ""
 
-        # 1) Parse file based on extension
         if file_ext == "pdf":
             raw_text = parse_pdf(uploaded_file)
         elif file_ext == "docx":
@@ -103,38 +110,40 @@ def main():
             st.error("Unsupported file type.")
             return
 
-        # If the file is empty or parsing failed
+        # Check if parsed text is empty
         if not raw_text.strip():
             st.error("No text found in the document. Please check your file.")
             return
 
-        # 2) Split text into chunks
+        # 3) Split text into chunks
         text_splitter = CharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
         chunks = text_splitter.split_text(raw_text)
 
         if not chunks:
-            st.error("The document text was parsed, but no chunks were created.")
+            st.error("Document was parsed, but no text chunks were created.")
             return
 
-        # 3) Create Vector Store
+        # 4) Create vector store
         vector_store = create_vector_store(chunks)
         if not vector_store:
-            st.error("Vector store could not be created (empty text or embedding error).")
+            st.error("Vector store could not be created (empty text or error).")
             return
 
-        # 4) Load a Hugging Face LLM
-        # Example: "meta-llama/Llama-2-7b-hf" if you have accepted the license
-        # You can also pick a smaller model if you are limited on GPU.
+        # 5) Load Llama 2 model via pipeline
+        # You must have accepted the Llama 2 license on Hugging Face
+        # (https://huggingface.co/meta-llama).
+        # Also we pass your token so it can access the gated model.
         model_name = "meta-llama/Llama-2-7b-hf"
         hf_pipe = pipeline(
             "text-generation",
             model=model_name,
-            # For large models, consider torch_dtype=torch.float16 if you have GPU
-            device_map="auto"  
+            device_map="auto",
+            use_auth_token=HF_TOKEN  # Pass the token
         )
+
         llm = HuggingFacePipeline(pipeline=hf_pipe)
 
-        # 5) Build a RetrievalQA chain
+        # 6) Build a RetrievalQA chain
         retriever = vector_store.as_retriever(search_kwargs={"k": 3})
         qa_chain = RetrievalQA.from_chain_type(
             llm=llm,
@@ -142,14 +151,12 @@ def main():
             retriever=retriever
         )
 
-        # 6) User question
-        question = st.text_input("Ask a question about the uploaded document:")
-
+        # 7) Ask your question
+        question = st.text_input("Ask a question about the document:")
         if question:
             with st.spinner("Generating answer..."):
                 answer = qa_chain.run(question)
             st.write("**Answer**:", answer)
-
 
 if __name__ == "__main__":
     main()
