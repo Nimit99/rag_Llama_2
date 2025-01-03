@@ -1,10 +1,5 @@
 streamlit
-langchain
-langchain-community
 PyPDF2
-docx2txt
-sentence-transformers
 transformers
-accelerate
-huggingface-hub
+sentence-transformers
 faiss-cpu
