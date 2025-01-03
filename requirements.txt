@@ -1,0 +1,1 @@
+pip install streamlit langchain chromadb pypdf docx2txt sentence-transformers transformers accelerate
