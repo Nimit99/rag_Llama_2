@@ -4,18 +4,19 @@ import docx2txt
 import csv
 import json
 import PyPDF2
+
+# For the embedding model + Hugging Face pipeline
 import sentence_transformers
 import transformers
+from transformers import pipeline
 
+# LangChain / LangChain Community Imports
 from langchain.docstore.document import Document
 from langchain.text_splitter import CharacterTextSplitter
-from langchain.embeddings import HuggingFaceEmbeddings
 from langchain_community.embeddings import HuggingFaceEmbeddings
-from langchain_community.vectorstores import FAISS  
+from langchain_community.vectorstores import FAISS
 from langchain.chains import RetrievalQA
 from langchain.llms import HuggingFacePipeline
-
-from transformers import pipeline
 
 # ---------- 1. Helper Functions ---------- #
 
@@ -33,8 +34,8 @@ def parse_docx(file):
 
 def parse_csv(file):
     """Extract text from a CSV file by reading row by row."""
-    text_data = []
     import io
+    text_data = []
     csv_file = io.TextIOWrapper(file, encoding='utf-8')
     reader = csv.reader(csv_file)
     for row in reader:
@@ -47,26 +48,17 @@ def parse_json(file):
     json_file = json.load(io.TextIOWrapper(file, encoding='utf-8'))
     return str(json_file)
 
-
 def create_vector_store(text_chunks):
-    """Create Chroma vectorstore from text chunks."""
-    docs = [Document(page_content=chunk) for chunk in text_chunks]
-    embedder = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
-    vector_store = Chroma.from_documents(docs, embedding=embedder)
-    return vector_store
-
-def create_vector_store(text_chunks):
+    """Create a FAISS vectorstore from text chunks."""
     docs = [Document(page_content=chunk) for chunk in text_chunks]
     embedder = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
     vector_store = FAISS.from_documents(docs, embedder)
     return vector_store
 
-
 # ---------- 2. Streamlit App ---------- #
-
 def main():
-    st.title("RAG App with Llama (or Other HF Model)")
-    
+    st.title("RAG App with FAISS + Llama/HuggingFace")
+
     # 1. File uploader
     uploaded_file = st.file_uploader(
         "Upload a PDF, DOCX, CSV, or JSON file", 
@@ -94,22 +86,20 @@ def main():
         text_splitter = CharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
         chunks = text_splitter.split_text(raw_text)
 
-        # 4. Create vector store
+        # 4. Create vector store (FAISS)
         vector_store = create_vector_store(chunks)
 
-        # 5. Load Hugging Face LLM (for example, Llama 2)
-        #    Make sure you have accepted the license on Hugging Face:
-        #    https://huggingface.co/meta-llama/Llama-2-7b-hf
-        model_name = "meta-llama/Llama-2-7b-hf"  # or any other HF model
+        # 5. Load a Hugging Face LLM (e.g., Llama 2)
+        #    Make sure you've accepted license on Hugging Face, etc.
+        model_name = "meta-llama/Llama-2-7b-hf"  # or any other model
         hf_pipe = pipeline(
             "text-generation", 
             model=model_name, 
-            torch_dtype="auto",  # might use torch.float16 if GPU available
             device_map="auto"
         )
         llm = HuggingFacePipeline(pipeline=hf_pipe)
         
-        # 6. Create a RetrievalQA chain
+        # 6. Build a RetrievalQA chain
         retriever = vector_store.as_retriever(search_kwargs={"k": 3})
         qa_chain = RetrievalQA.from_chain_type(
             llm=llm,
@@ -123,6 +113,6 @@ def main():
         if question:
             answer = qa_chain.run(question)
             st.write("**Answer**:", answer)
-            
+
 if __name__ == "__main__":
     main()
