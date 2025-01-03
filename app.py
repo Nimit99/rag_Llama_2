@@ -6,17 +6,17 @@ from sentence_transformers import SentenceTransformer
 from transformers import pipeline
 
 def main():
-    st.title("Simple RAG with Streamlit")
+    st.title("RAG with a Larger Flan Model")
 
     # 1) File Uploader
     uploaded_file = st.file_uploader("Upload a PDF", type="pdf")
     if uploaded_file is not None:
-        # 2) Extract text from PDF
+        # 2) Extract text
         pdf_text = []
         reader = PyPDF2.PdfReader(uploaded_file)
         for page_idx in range(len(reader.pages)):
-            page_text = reader.pages[page_idx].extract_text()
-            pdf_text.append(page_text)
+            text = reader.pages[page_idx].extract_text()
+            pdf_text.append(text)
         full_text = " ".join(pdf_text)
 
         # 3) Chunk the text
@@ -36,17 +36,25 @@ def main():
             distances, indices = index.search(query_emb.cpu().numpy(), k)
             return [chunks[i] for i in indices[0]]
 
-        # 5) Load Flan-T5 model (text2text-generation pipeline)
-        generator = pipeline("text2text-generation", model="google/flan-t5-base")
+        # 5) Use a larger Flan model
+        generator = pipeline("text2text-generation", model="google/flan-t5-large")
 
         def rag_answer(query):
             top_chunks = retrieve_top_k(query, k=2)
             context_text = " ".join(top_chunks)
             prompt = f"Context: {context_text}\n\nQuery: {query}\nAnswer:"
-            response = generator(prompt, max_length=128)[0]["generated_text"]
+            response = generator(
+                prompt,
+                max_length=256,     # Increased max_length for longer answers
+                num_return_sequences=1,
+                min_length=50,      # Force a longer minimum answer
+                do_sample=True,     # Sampling can help produce more detailed outputs
+                top_p=0.9,          # Adjust sampling temperature
+                temperature=0.7
+            )[0]["generated_text"]
             return response
 
-        # 6) User query + Generate answer
+        # 6) User query
         user_query = st.text_input("Enter your question here:")
         if st.button("Get Answer") and user_query:
             answer = rag_answer(user_query)
