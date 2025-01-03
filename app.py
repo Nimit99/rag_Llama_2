@@ -4,6 +4,8 @@ import docx2txt
 import csv
 import json
 import PyPDF2
+import sentence_transformers
+import transformers
 
 from langchain.docstore.document import Document
 from langchain.text_splitter import CharacterTextSplitter
