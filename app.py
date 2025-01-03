@@ -10,7 +10,8 @@ import transformers
 from langchain.docstore.document import Document
 from langchain.text_splitter import CharacterTextSplitter
 from langchain.embeddings import HuggingFaceEmbeddings
-from langchain.vectorstores import Chroma
+from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_community.vectorstores import FAISS  
 from langchain.chains import RetrievalQA
 from langchain.llms import HuggingFacePipeline
 
@@ -52,6 +53,12 @@ def create_vector_store(text_chunks):
     docs = [Document(page_content=chunk) for chunk in text_chunks]
     embedder = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
     vector_store = Chroma.from_documents(docs, embedding=embedder)
+    return vector_store
+
+def create_vector_store(text_chunks):
+    docs = [Document(page_content=chunk) for chunk in text_chunks]
+    embedder = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+    vector_store = FAISS.from_documents(docs, embedder)
     return vector_store
 
 
